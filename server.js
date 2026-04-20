@@ -7,7 +7,7 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3002;
 
 app.use(cors());
 app.use(express.json());
@@ -404,7 +404,7 @@ app.post('/api/admin/analyze', async (req, res) => {
 
         if (rowsToAnalyze.length > 0) {
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
             let promptText = `Analiza las siguientes asociaciones de palabras generadas por individuos en un test de creatividad (Test de Pensamiento Asociativo).
 Para cada respuesta, determina:
@@ -418,25 +418,40 @@ Lista de respuestas:\n`;
             });
             promptText += `\nDevuelve SOLAMENTE un array JSON válido, usando comillas dobles en las claves (no uses markdown), p. ej: [{"response_id": 1, "category": "decoración"}]\n`;
 
-            try {
-                const result = await model.generateContent(promptText);
-                let responseText = result.response.text().trim();
+            let retries = 3;
+            let success = false;
+            let lastError = null;
 
-                if (responseText.startsWith('\`\`\`json')) {
-                    responseText = responseText.replace(/^\`\`\`json/m, '').replace(/\`\`\`$/m, '').trim();
-                } else if (responseText.startsWith('\`\`\`')) {
-                    responseText = responseText.replace(/^\`\`\`/m, '').replace(/\`\`\`$/m, '').trim();
+            while (retries > 0 && !success) {
+                try {
+                    const result = await model.generateContent(promptText);
+                    let responseText = result.response.text().trim();
+
+                    if (responseText.startsWith('```json')) {
+                        responseText = responseText.replace(/^```json/m, '').replace(/```$/m, '').trim();
+                    } else if (responseText.startsWith('```')) {
+                        responseText = responseText.replace(/^```/m, '').replace(/```$/m, '').trim();
+                    }
+
+                    aiData = JSON.parse(responseText);
+                    
+                    aiData.forEach(item => {
+                        const respId = parseInt(item.response_id, 10) || parseInt(item.id, 10);
+                        aiMap[respId] = item;
+                    });
+                    success = true;
+                } catch (geminiErr) {
+                    lastError = geminiErr;
+                    console.warn(`Gemini API Error (Intentos restantes: ${retries - 1}):`, geminiErr.message);
+                    retries--;
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s before retrying
+                    }
                 }
+            }
 
-                aiData = JSON.parse(responseText);
-                
-                aiData.forEach(item => {
-                    const respId = parseInt(item.response_id, 10) || parseInt(item.id, 10);
-                    aiMap[respId] = item;
-                });
-            } catch (geminiErr) {
-                console.error("Gemini Error:", geminiErr);
-                return res.status(500).json({ error: 'Error llamando a la API de Gemini: ' + geminiErr.message });
+            if (!success) {
+                return res.status(500).json({ error: 'Fallo al contactar con la IA tras varios intentos: ' + (lastError ? lastError.message : 'Error desconocido') });
             }
         }
 
