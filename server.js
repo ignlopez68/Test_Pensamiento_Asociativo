@@ -404,7 +404,7 @@ app.post('/api/admin/analyze', async (req, res) => {
 
         if (rowsToAnalyze.length > 0) {
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
             let promptText = `Analiza las siguientes asociaciones de palabras generadas por individuos en un test de creatividad (Test de Pensamiento Asociativo).
 Para cada respuesta, determina:
