@@ -590,7 +590,7 @@ function App() {
     return (
       <div className="container">
         <div className="card">
-          <h1 className="title">Test de Creatividad / Usos Alternativos</h1>
+          <h1 className="title">Test de Creatividad / Pensamiento Asociativo</h1>
           <p className="subtitle">Por favor, identifícate con tu Email o NIA para empezar</p>
           
           {message && errorVisible && (
