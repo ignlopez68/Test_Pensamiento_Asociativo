@@ -404,7 +404,6 @@ app.post('/api/admin/analyze', async (req, res) => {
 
         if (rowsToAnalyze.length > 0) {
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
             let promptText = `Analiza las siguientes asociaciones de palabras generadas por individuos en un test de creatividad (Test de Pensamiento Asociativo).
 Para cada respuesta, determina:
@@ -418,12 +417,17 @@ Lista de respuestas:\n`;
             });
             promptText += `\nDevuelve SOLAMENTE un array JSON válido, usando comillas dobles en las claves (no uses markdown), p. ej: [{"response_id": 1, "category": "decoración"}]\n`;
 
-            let retries = 3;
+            let retries = 5;
             let success = false;
             let lastError = null;
+            let waitTime = 4000; // start with 4 seconds
 
             while (retries > 0 && !success) {
                 try {
+                    // Start with gemini-1.5-flash, but fallback to gemini-1.5-pro on the last 2 retries
+                    const currentModelStr = retries <= 2 ? "gemini-1.5-pro" : "gemini-1.5-flash";
+                    const model = genAI.getGenerativeModel({ model: currentModelStr });
+                    
                     const result = await model.generateContent(promptText);
                     let responseText = result.response.text().trim();
 
@@ -442,10 +446,12 @@ Lista de respuestas:\n`;
                     success = true;
                 } catch (geminiErr) {
                     lastError = geminiErr;
-                    console.warn(`Gemini API Error (Intentos restantes: ${retries - 1}):`, geminiErr.message);
+                    console.warn(`Gemini API Error usando modelo (Intentos restantes: ${retries - 1}):`, geminiErr.message);
                     retries--;
                     if (retries > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s before retrying
+                        console.log(`Esperando ${waitTime / 1000} segundos antes de reintentar...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        waitTime *= 2; // Exponential backoff (4s, 8s, 16s, 32s)
                     }
                 }
             }
