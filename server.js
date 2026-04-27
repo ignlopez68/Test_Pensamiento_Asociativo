@@ -404,59 +404,70 @@ app.post('/api/admin/analyze', async (req, res) => {
 
         if (rowsToAnalyze.length > 0) {
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+            const CHUNK_SIZE = 40; // Procesar 40 respuestas a la vez para no exceder cuota ni contexto
 
-            let promptText = `Analiza las siguientes asociaciones de palabras generadas por individuos en un test de creatividad (Test de Pensamiento Asociativo).
+            for (let i = 0; i < rowsToAnalyze.length; i += CHUNK_SIZE) {
+                const chunk = rowsToAnalyze.slice(i, i + CHUNK_SIZE);
+                
+                let promptText = `Analiza las siguientes asociaciones de palabras generadas por individuos en un test de creatividad (Test de Pensamiento Asociativo).
 Para cada respuesta, determina:
 1. "category": a qué categoría semántica general pertenece (1-2 palabras, en minúsculas).
 
 IMPORTANTE: Reutiliza estas categorías existentes si encajan perfectamente: [${existingCategories.join(', ')}]. Si la respuesta es completamente nueva y no encaja, inventa una categoría nueva lo más genérica posible.
 
 Lista de respuestas:\n`;
-            rowsToAnalyze.forEach(r => {
-                promptText += `[ID: ${r.id}] - Texto: "${r.response_text}"\n`;
-            });
-            promptText += `\nDevuelve SOLAMENTE un array JSON válido, usando comillas dobles en las claves (no uses markdown), p. ej: [{"response_id": 1, "category": "decoración"}]\n`;
+                chunk.forEach(r => {
+                    promptText += `[ID: ${r.id}] - Texto: "${r.response_text}"\n`;
+                });
+                promptText += `\nDevuelve SOLAMENTE un array JSON válido, usando comillas dobles en las claves (no uses markdown), p. ej: [{"response_id": 1, "category": "decoración"}]\n`;
 
-            let retries = 6;
-            let success = false;
-            let lastError = null;
-            let waitTime = 5000; // start with 5 seconds
+                let retries = 3;
+                let successChunk = false;
+                let lastError = null;
+                let waitTime = 6000; // Iniciar con 6 segundos por posibles rate limits
 
-            while (retries > 0 && !success) {
-                try {
-                    // Use only gemini-2.5-flash which is the model available in this API scope
-                    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-                    
-                    const result = await model.generateContent(promptText);
-                    let responseText = result.response.text().trim();
+                while (retries > 0 && !successChunk) {
+                    try {
+                        // Use only gemini-2.5-flash which is the model available in this API scope
+                        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+                        
+                        const result = await model.generateContent(promptText);
+                        let responseText = result.response.text().trim();
 
-                    if (responseText.startsWith('```json')) {
-                        responseText = responseText.replace(/^```json/m, '').replace(/```$/m, '').trim();
-                    } else if (responseText.startsWith('```')) {
-                        responseText = responseText.replace(/^```/m, '').replace(/```$/m, '').trim();
-                    }
+                        if (responseText.startsWith('```json')) {
+                            responseText = responseText.replace(/^```json/m, '').replace(/```$/m, '').trim();
+                        } else if (responseText.startsWith('```')) {
+                            responseText = responseText.replace(/^```/m, '').replace(/```$/m, '').trim();
+                        }
 
-                    aiData = JSON.parse(responseText);
-                    
-                    aiData.forEach(item => {
-                        const respId = parseInt(item.response_id, 10) || parseInt(item.id, 10);
-                        aiMap[respId] = item;
-                    });
-                    success = true;
-                } catch (geminiErr) {
-                    lastError = geminiErr;
-                    console.warn(`Gemini API Error usando modelo (Intentos restantes: ${retries - 1}):`, geminiErr.message);
-                    retries--;
-                    if (retries > 0) {
-                        console.log(`Esperando ${waitTime / 1000} segundos antes de reintentar...`);
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                        waitTime *= 2; // Exponential backoff (5s, 10s, 20s, 40s, 80s)
+                        const parsedChunk = JSON.parse(responseText);
+                        aiData = aiData.concat(parsedChunk);
+                        
+                        parsedChunk.forEach(item => {
+                            const respId = parseInt(item.response_id, 10) || parseInt(item.id, 10);
+                            aiMap[respId] = item;
+                        });
+                        successChunk = true;
+                    } catch (geminiErr) {
+                        lastError = geminiErr;
+                        console.warn(`Gemini API Error en lote ${Math.floor(i/CHUNK_SIZE)+1} (Intentos restantes: ${retries - 1}):`, geminiErr.message);
+                        retries--;
+                        if (retries > 0) {
+                            console.log(`Esperando ${waitTime / 1000} segundos antes de reintentar...`);
+                            await new Promise(resolve => setTimeout(resolve, waitTime));
+                            waitTime *= 2; // Exponential backoff (6s, 12s, 24s)
+                        }
                     }
                 }
-            }
 
-            if (!success) {
-                return res.status(500).json({ error: 'Fallo al contactar con la IA tras varios intentos: ' + (lastError ? lastError.message : 'Error desconocido') });
+                if (!successChunk) {
+                    return res.status(500).json({ error: `Fallo al contactar con la IA en el lote ${Math.floor(i/CHUNK_SIZE)+1} tras varios intentos: ` + (lastError ? lastError.message : 'Error desconocido') });
+                }
+
+                // Esperar 5 segundos entre lotes exitosos para evitar el error 429 Too Many Requests
+                if (i + CHUNK_SIZE < rowsToAnalyze.length) {
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                }
             }
         }
 
