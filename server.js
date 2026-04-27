@@ -429,7 +429,7 @@ Lista de respuestas:\n`;
                 while (retries > 0 && !successChunk) {
                     try {
                         const result = await anthropic.messages.create({
-                            model: "claude-3-haiku-20240307",
+                            model: "claude-sonnet-4-5-20250929",
                             max_tokens: 4096,
                             system: "Eres una IA que responde exclusivamente con un array JSON válido sin bloques markdown (no uses ```json) ni texto adicional.",
                             temperature: 0,
