@@ -391,7 +391,7 @@ function AdminMode({ onBack }) {
                         <td>{u.elaboracion.toFixed(2)}</td>
                       </tr>
                     ];
-                    if (u.respuestas && u.respuestas.length > 0) {
+                    if (u.respuestas && u.respuestas.length > 0 && filterNia.trim() !== '') {
                       rows.push(
                         <tr key={`resp-${u.user_id}`}>
                           <td colSpan="8" style={{ padding: '4px 8px 12px 8px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem', borderBottom: '1px solid #4b5563' }}>

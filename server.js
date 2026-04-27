@@ -330,7 +330,7 @@ app.post('/api/admin/results', async (req, res) => {
             originalidad,
             originalidad_relativa,
             elaboracion,
-            respuestas: (nia && nia.trim() !== '') ? (stats ? stats.respuestas_textos : []) : []
+            respuestas: stats ? stats.respuestas_textos : []
         });
     }
 
