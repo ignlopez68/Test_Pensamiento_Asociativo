@@ -424,8 +424,8 @@ Lista de respuestas:\n`;
 
             while (retries > 0 && !success) {
                 try {
-                    // Use only gemini-1.5-flash, which most reliably handles JSON and has high rate limits.
-                    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                    // Use only gemini-2.5-flash which is the model available in this API scope
+                    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
                     
                     const result = await model.generateContent(promptText);
                     let responseText = result.response.text().trim();

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import './App.css';
 
 const studiesOptions = [
@@ -277,6 +278,29 @@ function AdminMode({ onBack }) {
     }
   };
 
+  const handleExportExcel = () => {
+    if (!resultsData || !resultsData.users) return;
+
+    const exportData = resultsData.users.map(u => ({
+      'Email': u.email,
+      'NIA': u.nia,
+      'Sexo': u.sex || '',
+      'Titulación': u.studies || '',
+      'Fluidez': u.fluidez,
+      'Originalidad Absoluta': u.originalidad,
+      'Originalidad Relativa': u.originalidad_relativa ? u.originalidad_relativa.toFixed(2) : '0.00',
+      'Flexibilidad Absoluta': u.flexibilidad,
+      'Flexibilidad Relativa': u.flexibilidad_relativa ? u.flexibilidad_relativa.toFixed(2) : '0.00',
+      'Elaboración': u.elaboracion ? u.elaboracion.toFixed(2) : '0.00',
+      'Respuestas': u.respuestas ? u.respuestas.join(' | ') : ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Resultados");
+    XLSX.writeFile(workbook, `resultados_asociativo_${filterType === 'date' ? selectedDate : 'historico'}.xlsx`);
+  };
+
   if (stats) {
     return (
       <div className="card admin-card">
@@ -380,6 +404,14 @@ function AdminMode({ onBack }) {
                   })}
                 </tbody>
               </table>
+
+              <button
+                className="submit-btn"
+                onClick={handleExportExcel}
+                style={{ marginTop: '20px', background: '#10b981', display: 'block', width: '100%' }}
+              >
+                Descargar Resultados en Excel
+              </button>
             </div>
           )}
         </div>
