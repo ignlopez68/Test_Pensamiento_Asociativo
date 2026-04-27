@@ -404,7 +404,7 @@ app.post('/api/admin/analyze', async (req, res) => {
 
         if (rowsToAnalyze.length > 0) {
             const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-            const CHUNK_SIZE = 40; // Procesar 40 respuestas a la vez para no exceder cuota ni contexto
+            const CHUNK_SIZE = 80; // Procesar 80 respuestas a la vez para minimizar el tiempo y evitar timeout de Vercel
 
             for (let i = 0; i < rowsToAnalyze.length; i += CHUNK_SIZE) {
                 const chunk = rowsToAnalyze.slice(i, i + CHUNK_SIZE);
@@ -424,7 +424,7 @@ Lista de respuestas:\n`;
                 let retries = 3;
                 let successChunk = false;
                 let lastError = null;
-                let waitTime = 6000; // Iniciar con 6 segundos por posibles rate limits
+                let waitTime = 2000; // Iniciar con 2 segundos por si hay fallos
 
                 while (retries > 0 && !successChunk) {
                     try {
@@ -461,7 +461,7 @@ Lista de respuestas:\n`;
                         if (retries > 0) {
                             console.log(`Esperando ${waitTime / 1000} segundos antes de reintentar...`);
                             await new Promise(resolve => setTimeout(resolve, waitTime));
-                            waitTime *= 2; // Exponential backoff (6s, 12s, 24s)
+                            waitTime *= 2; // Exponential backoff (2s, 4s, 8s)
                         }
                     }
                 }
@@ -470,9 +470,9 @@ Lista de respuestas:\n`;
                     return res.status(500).json({ error: `Fallo al contactar con la IA en el lote ${Math.floor(i/CHUNK_SIZE)+1} tras varios intentos: ` + (lastError ? lastError.message : 'Error desconocido') });
                 }
 
-                // Esperar 5 segundos entre lotes exitosos para evitar el error 429 Too Many Requests
+                // Pausa muy breve entre lotes para evitar sobrecargar, pero corta para evitar el timeout de Vercel
                 if (i + CHUNK_SIZE < rowsToAnalyze.length) {
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 }
             }
         }

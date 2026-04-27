@@ -249,7 +249,13 @@ function AdminMode({ onBack }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`El servidor devolvió una respuesta no válida. Detalle: ${text.substring(0, 100)}... (Posible tiempo de espera agotado en Vercel)`);
+      }
       if (!res.ok) throw new Error(data.error || 'Error en el análisis');
       setAnalysisMessage({ type: 'success', text: data.message });
     } catch (err) {
