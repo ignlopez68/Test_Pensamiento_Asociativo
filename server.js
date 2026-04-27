@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import nodemailer from 'nodemailer';
 import express from 'express';
 import cors from 'cors';
@@ -357,8 +357,8 @@ app.post('/api/admin/analyze', async (req, res) => {
     if (!historical && !date) return res.status(400).json({ error: 'Falta la fecha' });
 
     try {
-        if (!process.env.GEMINI_API_KEY) {
-            return res.status(500).json({ error: 'Falta configurar GEMINI_API_KEY en el backend.' });
+        if (!process.env.ANTHROPIC_API_KEY) {
+            return res.status(500).json({ error: 'Falta configurar ANTHROPIC_API_KEY en el backend.' });
         }
         if (!historical && (!process.env.EMAIL_USER || !process.env.EMAIL_PASS)) {
             return res.status(500).json({ error: 'Faltan credenciales de EMAIL (EMAIL_USER y EMAIL_PASS).' });
@@ -403,7 +403,7 @@ app.post('/api/admin/analyze', async (req, res) => {
         let aiData = [];
 
         if (rowsToAnalyze.length > 0) {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+            const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
             const CHUNK_SIZE = 40; // Procesar 40 respuestas a la vez para no exceder cuota ni contexto
 
             for (let i = 0; i < rowsToAnalyze.length; i += CHUNK_SIZE) {
@@ -428,11 +428,17 @@ Lista de respuestas:\n`;
 
                 while (retries > 0 && !successChunk) {
                     try {
-                        // Use only gemini-2.5-flash which is the model available in this API scope
-                        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+                        const result = await anthropic.messages.create({
+                            model: "claude-3-5-haiku-20241022",
+                            max_tokens: 4096,
+                            system: "Eres una IA que responde exclusivamente con un array JSON válido sin bloques markdown (no uses ```json) ni texto adicional.",
+                            temperature: 0,
+                            messages: [
+                                { role: "user", content: promptText }
+                            ]
+                        });
                         
-                        const result = await model.generateContent(promptText);
-                        let responseText = result.response.text().trim();
+                        let responseText = result.content[0].text.trim();
 
                         if (responseText.startsWith('```json')) {
                             responseText = responseText.replace(/^```json/m, '').replace(/```$/m, '').trim();
@@ -448,9 +454,9 @@ Lista de respuestas:\n`;
                             aiMap[respId] = item;
                         });
                         successChunk = true;
-                    } catch (geminiErr) {
-                        lastError = geminiErr;
-                        console.warn(`Gemini API Error en lote ${Math.floor(i/CHUNK_SIZE)+1} (Intentos restantes: ${retries - 1}):`, geminiErr.message);
+                    } catch (aiErr) {
+                        lastError = aiErr;
+                        console.warn(`Anthropic API Error en lote ${Math.floor(i/CHUNK_SIZE)+1} (Intentos restantes: ${retries - 1}):`, aiErr.message);
                         retries--;
                         if (retries > 0) {
                             console.log(`Esperando ${waitTime / 1000} segundos antes de reintentar...`);
