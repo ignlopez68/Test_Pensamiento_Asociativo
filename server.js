@@ -417,16 +417,15 @@ Lista de respuestas:\n`;
             });
             promptText += `\nDevuelve SOLAMENTE un array JSON válido, usando comillas dobles en las claves (no uses markdown), p. ej: [{"response_id": 1, "category": "decoración"}]\n`;
 
-            let retries = 5;
+            let retries = 6;
             let success = false;
             let lastError = null;
-            let waitTime = 4000; // start with 4 seconds
+            let waitTime = 5000; // start with 5 seconds
 
             while (retries > 0 && !success) {
                 try {
-                    // Start with gemini-1.5-flash, but fallback to gemini-1.5-pro on the last 2 retries
-                    const currentModelStr = retries <= 2 ? "gemini-1.5-pro" : "gemini-1.5-flash";
-                    const model = genAI.getGenerativeModel({ model: currentModelStr });
+                    // Use only gemini-1.5-flash, which most reliably handles JSON and has high rate limits.
+                    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                     
                     const result = await model.generateContent(promptText);
                     let responseText = result.response.text().trim();
@@ -451,7 +450,7 @@ Lista de respuestas:\n`;
                     if (retries > 0) {
                         console.log(`Esperando ${waitTime / 1000} segundos antes de reintentar...`);
                         await new Promise(resolve => setTimeout(resolve, waitTime));
-                        waitTime *= 2; // Exponential backoff (4s, 8s, 16s, 32s)
+                        waitTime *= 2; // Exponential backoff (5s, 10s, 20s, 40s, 80s)
                     }
                 }
             }
